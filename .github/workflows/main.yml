@@ -11,15 +11,14 @@ extract:
 runs-on: ubuntu-latest
 
 steps:
-  - uses: actions/checkout@v4
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
   - name: Extract ZIP
     run: |
       mkdir -p temp
       unzip -o "*.zip" -d temp
-
       cp -a temp/alphamotor-main/. .
-
       rm -rf temp extracted
 
   - name: Commit changes
