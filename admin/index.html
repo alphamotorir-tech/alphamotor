@@ -259,6 +259,7 @@ main{max-width:720px;margin:0 auto;padding:16px 14px 60px}
     { id: 'badges', title: 'متن تضمین و سابقه', render: renderBadges },
     { id: 'hero', title: 'متن و زیرعنوان اول سایت', render: renderHero },
     { id: 'location', title: 'آدرس و موقعیت مکانی', render: renderLocation },
+    { id: 'phones', title: 'شماره تماس‌ها', render: renderPhones },
     { id: 'reviews', title: 'نظرات مشتریان', render: renderReviews },
     { id: 'topics', title: 'موضوعات (خدمات)', render: renderTopics },
     { id: 'admins', title: 'مدیران', render: renderAdmins }
@@ -602,6 +603,89 @@ main{max-width:720px;margin:0 auto;padding:16px 14px 60px}
           'لینک‌های کوتاه (مثل maps.app.goo.gl) خوانده نمی‌شوند؛ لینک را در مرورگر باز کنید و آدرس کامل را بگذارید.'),
         info, frameWrap, save, msg));
       refresh();
+      return wrap;
+    });
+  }
+
+  /* ---------- شماره تماس‌ها ---------- */
+  // مقدار پیش‌فرض همان چیزی است که داخل HTML سایت نوشته شده (js/phones.js هم همین‌ها را دارد).
+  var PHONE_DEFAULT = [
+    { name: 'مهدی آذری', number: '09142446456' },
+    { name: 'بهرام گوزلی', number: '09306530399' }
+  ];
+
+  function phoneClean(v) {
+    var t = String(v)
+      .replace(/[۰-۹]/g, function (d) { return '۰۱۲۳۴۵۶۷۸۹'.indexOf(d); })
+      .replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); })
+      .replace(/[\s\-().]/g, '');
+    return /^\+?\d{8,15}$/.test(t) ? t : '';
+  }
+
+  function renderPhones() {
+    var keys = [];
+    PHONE_DEFAULT.forEach(function (d, i) { keys.push('phone' + (i + 1) + '_name', 'phone' + (i + 1) + '_number'); });
+    return sb.from('site_settings').select('key,value').in('key', keys).then(function (res) {
+      if (res.error) throw res.error;
+      var cur = {};
+      (res.data || []).forEach(function (r) { cur[r.key] = r.value; });
+
+      var card = h('div', { class: 'card' });
+      var fields = [];
+      PHONE_DEFAULT.forEach(function (d, i) {
+        var nm = (typeof cur['phone' + (i + 1) + '_name'] === 'string' && cur['phone' + (i + 1) + '_name'].trim()) || d.name;
+        var no = (typeof cur['phone' + (i + 1) + '_number'] === 'string' && cur['phone' + (i + 1) + '_number'].trim()) || d.number;
+        var inName = h('input', { type: 'text', maxlength: 40, value: nm, autocomplete: 'off' });
+        var inNum = h('input', { type: 'text', dir: 'ltr', inputmode: 'tel', maxlength: 20, autocomplete: 'off', spellcheck: 'false', value: no, placeholder: '09123456789' });
+        fields.push({ name: inName, number: inNum, label: 'شمارهٔ ' + (i + 1) });
+        if (i > 0) card.append(h('hr', { style: 'border:0;border-top:1px solid var(--line);margin:14px 0' }));
+        card.append(
+          h('h3', { style: 'margin-bottom:8px' }, 'شمارهٔ ' + fnum(i + 1)),
+          h('label', { class: 'f' }, 'عنوان (مثلاً نام شخص یا «دفتر مرکزی»)', inName),
+          h('label', { class: 'f' }, 'شماره تماس', inNum));
+      });
+
+      var msg = h('p', { class: 'msg' });
+      var save = h('button', { class: 'btn copper block', type: 'button' }, 'ذخیره تغییرات');
+      save.addEventListener('click', function () {
+        msg.className = 'msg';
+        msg.textContent = '';
+        var rows = [], seen = {}, now = new Date().toISOString();
+        for (var i = 0; i < fields.length; i++) {
+          var f = fields[i];
+          var nm = f.name.value.trim().replace(/\s+/g, ' ');
+          var no = phoneClean(f.number.value);
+          if (nm.length < 2) { msg.className = 'msg err'; msg.textContent = 'عنوان ' + f.label + ' را وارد کنید (حداقل ۲ حرف).'; return; }
+          if (!no) { msg.className = 'msg err'; msg.textContent = 'شمارهٔ ' + f.label + ' معتبر نیست. فقط عدد بنویسید (مثل 09123456789 یا +989123456789).'; return; }
+          if (seen[no]) { msg.className = 'msg err'; msg.textContent = 'دو شماره نباید یکسان باشند.'; return; }
+          seen[no] = true;
+          rows.push({ key: 'phone' + (i + 1) + '_name', value: nm, updated_at: now });
+          rows.push({ key: 'phone' + (i + 1) + '_number', value: no, updated_at: now });
+        }
+        save.disabled = true;
+        sb.from('site_settings').upsert(rows, { onConflict: 'key' }).select().then(function (u) {
+          if (u.error) throw u.error;
+          if (!u.data || u.data.length !== rows.length) throw new Error('not allowed');
+          fields.forEach(function (f, i) {
+            f.name.value = rows[i * 2].value;
+            f.number.value = rows[i * 2 + 1].value;
+          });
+          msg.className = 'msg ok';
+          msg.textContent = 'ذخیره شد. شماره‌ها همین الان در همهٔ صفحه‌های سایت عوض می‌شوند.';
+          toast('ذخیره شد');
+        }).catch(function (e) {
+          msg.className = 'msg err';
+          msg.textContent = fa(e);
+        }).then(function () { save.disabled = false; });
+      });
+      card.append(save, msg);
+
+      var wrap = h('div');
+      wrap.append(h('div', { class: 'note' },
+        'عنوان و شمارهٔ هر مورد در همهٔ صفحه‌ها عوض می‌شود: دکمه‌های «تماس»، نوار تماس پایین صفحه، پاورقی، صفحهٔ خدمات و صفحهٔ همکاران و پاسخ سؤال‌های متداول. ' +
+        'نام شخص در متن‌های دیگر سایت (مثل صفحهٔ معرفی) با این بخش تغییر نمی‌کند، فقط عنوان کنار شماره‌ها. ' +
+        'اطلاعات سئوی داخل کد (JSON-LD) هم برای بازدیدکننده به‌روز می‌شود، ولی ربات‌های گوگل ممکن است نسخهٔ قدیمی را ببینند؛ بعد از تغییر واقعی شماره، پروفایل گوگل/نشان/بلد را هم به‌روز کنید.'));
+      wrap.append(card);
       return wrap;
     });
   }
