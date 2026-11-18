@@ -1,18 +1,16 @@
-name: Extract ZIP to Root
+name: Extract ZIP
 
 on:
 workflow_dispatch:
 
-permissions:
-contents: write
-
 jobs:
 extract:
 runs-on: ubuntu-latest
+permissions:
+contents: write
 
 steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+  - uses: actions/checkout@v4
 
   - name: Extract ZIP
     run: |
@@ -21,10 +19,10 @@ steps:
       cp -a temp/alphamotor-main/. .
       rm -rf temp extracted
 
-  - name: Commit changes
+  - name: Save changes
     run: |
       git config user.name "github-actions[bot]"
       git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       git add -A
-      git commit -m "Extract project files to root" || echo "No changes"
+      git commit -m "Extract ZIP into root" || exit 0
       git push
